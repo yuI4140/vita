@@ -3,6 +3,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <sys/time.h>
+#include <time.h>
 #define VCOLOR_DEFAULT 0
 #define VCOLOR_BLACK 1
 #define VCOLOR_RED 2
@@ -49,7 +51,8 @@ int vGetWinW();
 int vGetWinH();
 // Set text attributes
 void vSetAttr(int foregroundColor, int backgroundColor);
-
+void vGetStr(char *str, size_t size);
+float deltaTime();
 #ifdef V_IMP
 void vClear() { werase(stdscr); }
 
@@ -59,6 +62,18 @@ void vInit() {
   noecho();             // Don't echo user input
   keypad(stdscr, true); // Enable function keys
   start_color();        // Enable color support
+  use_default_colors(); // Use default terminal colors
+  curs_set(0);          // Hide cursor
+
+  // Define color pairs
+  init_pair(1, VCOLOR_DEFAULT, VCOLOR_BLACK);
+  init_pair(2, VCOLOR_BLACK, VCOLOR_GREEN);
+  init_pair(3, VCOLOR_BLACK, VCOLOR_CYAN);
+  init_pair(4, VCOLOR_BLACK, VCOLOR_YELLOW);
+  init_pair(5, VCOLOR_BLACK, VCOLOR_BLUE);
+  init_pair(6, VCOLOR_BLACK, VCOLOR_MAGENTA);
+  init_pair(7, VCOLOR_BLACK, VCOLOR_RED);
+  init_pair(8, VCOLOR_BLACK, VCOLOR_WHITE);
 }
 
 void vExit() {
@@ -100,10 +115,25 @@ void vPrintStr(const char *str) { addstr(str); }
 void vPrintF(const char *format, ...) {
   va_list args;
   va_start(args, format);
-  vwprintw(stdscr, format, args);
+
+  va_list args_copy;
+  va_copy(args_copy, args);
+  int size = vsnprintf(NULL, 0, format, args_copy);
+  va_end(args_copy);
+
+  if (size >= 0) {
+
+    char *buffer = (char *)malloc((size + 1) * sizeof(char));
+    if (buffer != NULL) {
+
+      vsnprintf(buffer, size + 1, format, args);
+      vPrintStr(buffer);
+      free(buffer);
+    }
+  }
+
   va_end(args);
 }
-
 void vMovCrsr(int x, int y) { move(y, x); }
 
 void vCrsrMov(Cursor *crsr) { move(crsr->y, crsr->x); }
@@ -127,5 +157,46 @@ int vGetWinH() { return LINES; }
 void vSetAttr(int foregroundColor, int backgroundColor) {
   attron(COLOR_PAIR(foregroundColor) | (backgroundColor << 3));
 }
+void vGetStr(char *str, size_t size) {
+  vFlushInput(); // Flush any pending input
 
+  int ch;
+  size_t i = 0;
+
+  while (i < size - 1) {
+    ch = vGetKey();
+
+    if (ch == '\n' || ch == '\r') {
+      break;
+    } else if (ch == KEY_BACKSPACE || ch == 127) {
+      if (i > 0) {
+        i--;
+        vPrintChar('\b');
+        vPrintChar(' ');
+        vPrintChar('\b');
+      }
+    } else if (ch >= 32 && ch <= 126) {
+      str[i] = ch;
+      i++;
+      vPrintChar(ch);
+    }
+  }
+
+  str[i] = '\0';
+}
+float deltaTime() {
+  static struct timeval lastTime;
+  struct timeval currentTime;
+  gettimeofday(&currentTime, NULL);
+
+  if (lastTime.tv_sec == 0 && lastTime.tv_usec == 0) {
+    lastTime = currentTime;
+  }
+
+  float deltaTime = (currentTime.tv_sec - lastTime.tv_sec) +
+                    (currentTime.tv_usec - lastTime.tv_usec) / 1000000.0f;
+  lastTime = currentTime;
+
+  return deltaTime;
+}
 #endif
